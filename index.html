@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title></title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #0a0c12;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', 'Noto Sans Arabic', sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .center-stage {
+            width: 100%;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .text-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.2rem;
+        }
+
+        .dynamic-text {
+            font-size: clamp(1.6rem, 7vw, 3rem);
+            font-weight: 500;
+            color: #eceef5;
+            line-height: 1.5;
+            word-break: break-word;
+            white-space: normal;
+            max-width: 90vw;
+            transition: opacity 0.45s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+            opacity: 1;
+        }
+
+        .counter-display {
+            font-size: clamp(1.2rem, 5vw, 2rem);
+            font-weight: 500;
+            color: #8b92b0;
+            background: rgba(30, 32, 44, 0.6);
+            padding: 0.4rem 1rem;
+            border-radius: 40px;
+            display: inline-block;
+            letter-spacing: 1px;
+            font-feature-settings: "tnum";
+            font-variant-numeric: tabular-nums;
+            backdrop-filter: blur(4px);
+        }
+
+        .video-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000000dd;
+            backdrop-filter: blur(12px);
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.4s ease, visibility 0s linear 0.4s;
+        }
+        .video-container.active {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.4s ease, visibility 0s linear 0s;
+        }
+        video {
+            max-width: 90%;
+            max-height: 70vh;
+            width: auto;
+            height: auto;
+            border-radius: 28px;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.5);
+            outline: none;
+            background: #000;
+        }
+        .video-caption {
+            margin-top: 1.2rem;
+            font-size: 1.1rem;
+            color: #f0f3fa;
+            background: #1e1f2c80;
+            padding: 0.6rem 1.2rem;
+            border-radius: 60px;
+            backdrop-filter: blur(8px);
+            font-weight: 500;
+            text-align: center;
+            max-width: 85vw;
+            line-height: 1.4;
+        }
+
+        .developer-credit {
+            position: fixed;
+            bottom: 16px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 0.85rem;
+            color: #5b5f73;
+            background: transparent;
+            pointer-events: none;
+            z-index: 50;
+            font-weight: 400;
+            font-family: monospace;
+            letter-spacing: 0.3px;
+        }
+
+        .fade-out-effect {
+            opacity: 0;
+            transition: opacity 0.45s ease-out;
+        }
+
+        :focus-visible {
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="center-stage">
+    <div class="text-wrapper">
+        <div class="dynamic-text" id="mainText"></div>
+        <div class="counter-display" id="counterDisplay"></div>
+    </div>
+</div>
+
+<div class="video-container" id="videoModal">
+    <video id="demoVideo" controls playsinline>
+        <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" type="video/mp4">
+    </video>
+    <div class="video-caption" id="videoCaption">اذا ما اشتغل الفيديو دوس عليه علمود يشتغل، واذا ماكو صوت بس فعله.</div>
+</div>
+
+<div class="developer-credit">المطور: محمود</div>
+
+<script>
+    (function() {
+        // ===================== المتغيرات القابلة للتعديل =====================
+        const STAGES_CONFIG = [
+            { text: "اني حاب اكلك شغله بس دائما مستحي اكلك ياها...", counterStart: 1, counterEnd: 6 },
+            { text: "افكر دائما اكلك اياها بس خاف تزعل", counterStart: 1, counterEnd: 10 },
+            { text: "اتمنى ما تزعل...\n\n(ديربالك تدوس عالشاشة.)", counterStart: 1, counterEnd: 5 }
+        ];
+
+        const VIDEO_URL = "https://raw.githubusercontent.com/mhmod3/Eid-mapark/refs/heads/main/1.mp4";
+        const VIDEO_CAPTION_TEXT = "اذا ما اشتغل الفيديو دوس عليه علمود يشتغل، واذا ماكو صوت بس فعله.";
+        const TAP_RESET_MESSAGE = "مو كلتلك لا تدوس علشاشة زمال انته ؟";
+        const FADE_DURATION = 450;
+        const COUNTER_INTERVAL_MS = 1000;
+        const VIDEO_DELAY_AFTER_STAGE3_MS = 1800;
+        // =====================================================================
+
+        let currentStage = 0;
+        let activeTimer = null;
+        let counterInterval = null;
+        let isFadingOut = false;
+        let isVideoVisible = false;
+        let isWaitingForVideo = false;
+        let isVideoActive = false;
+        
+        const videoModal = document.getElementById('videoModal');
+        const videoElement = document.getElementById('demoVideo');
+        const textContainer = document.getElementById('mainText');
+        const counterDisplay = document.getElementById('counterDisplay');
+        const videoCaptionElement = document.getElementById('videoCaption');
+        
+        if (videoElement) {
+            videoElement.src = VIDEO_URL;
+            videoElement.volume = 1.0;
+            videoElement.muted = false;
+        }
+        if (videoCaptionElement) {
+            videoCaptionElement.textContent = VIDEO_CAPTION_TEXT;
+        }
+        
+        function haltAllTimers() {
+            if (activeTimer) {
+                clearTimeout(activeTimer);
+                activeTimer = null;
+            }
+            if (counterInterval) {
+                clearInterval(counterInterval);
+                counterInterval = null;
+            }
+        }
+        
+        function cancelVideoDelay() {
+            if (activeTimer && isWaitingForVideo) {
+                clearTimeout(activeTimer);
+                activeTimer = null;
+                isWaitingForVideo = false;
+            }
+        }
+        
+        function forceHideVideoAndStop() {
+            cancelVideoDelay();
+            if (videoModal.classList.contains('active')) {
+                videoModal.classList.remove('active');
+                isVideoVisible = false;
+                isVideoActive = false;
+                if (videoElement) {
+                    videoElement.pause();
+                    videoElement.currentTime = 0;
+                }
+            } else {
+                if (videoElement) {
+                    videoElement.pause();
+                    videoElement.currentTime = 0;
+                }
+                videoModal.classList.remove('active');
+                isVideoVisible = false;
+                isVideoActive = false;
+            }
+        }
+        
+        function showVideoWithMessage() {
+            if (isVideoVisible) return;
+            if (videoElement) {
+                videoElement.load();
+                videoElement.muted = false;
+                videoElement.volume = 1.0;
+                const playPromise = videoElement.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(e => {
+                        videoElement.muted = true;
+                        videoElement.play();
+                    });
+                }
+            }
+            videoModal.classList.add('active');
+            isVideoVisible = true;
+            isVideoActive = true;
+            isWaitingForVideo = false;
+        }
+        
+        function updateDisplay(mainText, counterValue) {
+            textContainer.textContent = mainText;
+            if (counterValue !== null && !isFadingOut) {
+                counterDisplay.textContent = counterValue;
+                counterDisplay.style.opacity = '1';
+            } else if (counterValue === null) {
+                counterDisplay.textContent = '';
+            }
+        }
+        
+        function hideCounterTemporarily() {
+            counterDisplay.style.opacity = '0';
+        }
+        
+        function showCounter() {
+            counterDisplay.style.opacity = '1';
+        }
+        
+        function resetToStage0() {
+            haltAllTimers();
+            cancelVideoDelay();
+            
+            if (isVideoVisible) {
+                forceHideVideoAndStop();
+            }
+            
+            textContainer.classList.remove('fade-out-effect');
+            counterDisplay.classList.remove('fade-out-effect');
+            isFadingOut = false;
+            currentStage = 0;
+            isVideoActive = false;
+            
+            const stageData = STAGES_CONFIG[0];
+            updateDisplay(stageData.text, stageData.counterStart);
+            showCounter();
+            startCounterForStage(0);
+        }
+        
+        function finishCurrentStageAndMoveNext() {
+            if (isFadingOut) return;
+            isFadingOut = true;
+            haltAllTimers();
+            cancelVideoDelay();
+            
+            textContainer.classList.add('fade-out-effect');
+            counterDisplay.classList.add('fade-out-effect');
+            
+            activeTimer = setTimeout(() => {
+                if (currentStage === 0) {
+                    currentStage = 1;
+                    const newData = STAGES_CONFIG[1];
+                    updateDisplay(newData.text, newData.counterStart);
+                    textContainer.classList.remove('fade-out-effect');
+                    counterDisplay.classList.remove('fade-out-effect');
+                    isFadingOut = false;
+                    showCounter();
+                    startCounterForStage(1);
+                } 
+                else if (currentStage === 1) {
+                    currentStage = 2;
+                    const newData = STAGES_CONFIG[2];
+                    updateDisplay(newData.text, newData.counterStart);
+                    textContainer.classList.remove('fade-out-effect');
+                    counterDisplay.classList.remove('fade-out-effect');
+                    isFadingOut = false;
+                    showCounter();
+                    startCounterForStage(2);
+                }
+                else if (currentStage === 2) {
+                    updateDisplay('', null);
+                    counterDisplay.textContent = '';
+                    textContainer.classList.remove('fade-out-effect');
+                    counterDisplay.classList.remove('fade-out-effect');
+                    isFadingOut = false;
+                    
+                    cancelVideoDelay();
+                    isWaitingForVideo = true;
+                    activeTimer = setTimeout(() => {
+                        if (!isVideoVisible && textContainer.textContent === '' && currentStage === 2 && !isFadingOut) {
+                            showVideoWithMessage();
+                        }
+                        isWaitingForVideo = false;
+                        activeTimer = null;
+                    }, VIDEO_DELAY_AFTER_STAGE3_MS);
+                }
+                activeTimer = null;
+            }, FADE_DURATION);
+        }
+        
+        function startCounterForStage(stageId) {
+            if (counterInterval) clearInterval(counterInterval);
+            
+            const stageConf = STAGES_CONFIG[stageId];
+            if (!stageConf) return;
+            
+            let currentVal = stageConf.counterStart;
+            const maxVal = stageConf.counterEnd;
+            
+            updateDisplay(stageConf.text, currentVal);
+            
+            counterInterval = setInterval(() => {
+                if (isFadingOut) return;
+                if (currentStage !== stageId) {
+                    clearInterval(counterInterval);
+                    counterInterval = null;
+                    return;
+                }
+                
+                if (currentVal < maxVal) {
+                    currentVal++;
+                    updateDisplay(stageConf.text, currentVal);
+                } 
+                else if (currentVal === maxVal) {
+                    clearInterval(counterInterval);
+                    counterInterval = null;
+                    finishCurrentStageAndMoveNext();
+                }
+            }, COUNTER_INTERVAL_MS);
+        }
+        
+        function handleTap() {
+            if (isVideoActive) {
+                return;
+            }
+            
+            if (currentStage === 2 && !isFadingOut && !isVideoActive) {
+                haltAllTimers();
+                cancelVideoDelay();
+                
+                if (isVideoVisible) {
+                    forceHideVideoAndStop();
+                }
+                
+                textContainer.classList.remove('fade-out-effect');
+                counterDisplay.classList.remove('fade-out-effect');
+                isFadingOut = false;
+                
+                updateDisplay(TAP_RESET_MESSAGE, null);
+                hideCounterTemporarily();
+                
+                if (activeTimer) clearTimeout(activeTimer);
+                activeTimer = setTimeout(() => {
+                    resetToStage0();
+                    activeTimer = null;
+                }, 380);
+            }
+        }
+        
+        window.addEventListener('click', function() {
+            handleTap();
+        });
+        
+        function initialize() {
+            forceHideVideoAndStop();
+            currentStage = 0;
+            isFadingOut = false;
+            isWaitingForVideo = false;
+            isVideoActive = false;
+            const initData = STAGES_CONFIG[0];
+            updateDisplay(initData.text, initData.counterStart);
+            showCounter();
+            startCounterForStage(0);
+        }
+        
+        initialize();
+    })();
+</script>
+</body>
+</html>
